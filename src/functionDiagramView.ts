@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import { ProjectGraph } from './fileAnalyzer';
+import { FunctionGraph } from './functionAnalyzer';
 
-export class DiagramViewProvider {
+export class FunctionDiagramViewProvider {
     private panel: vscode.WebviewPanel | undefined;
     private context: vscode.ExtensionContext;
 
@@ -9,13 +9,13 @@ export class DiagramViewProvider {
         this.context = context;
     }
 
-    public async showDiagram(graph: ProjectGraph) {
+    public async showDiagram(graph: FunctionGraph) {
         if (this.panel) {
             this.panel.reveal(vscode.ViewColumn.One);
         } else {
             this.panel = vscode.window.createWebviewPanel(
-                'projectDiagram',
-                'Project Dependency Diagram',
+                'functionDiagram',
+                'Function Call Graph',
                 vscode.ViewColumn.One,
                 {
                     enableScripts: true,
@@ -36,17 +36,17 @@ export class DiagramViewProvider {
             async message => {
                 switch (message.command) {
                     case 'openFile':
-                        await this.openFile(message.filePath);
+                        await this.openFile(message.filePath, message.line);
                         break;
-                    case 'showFileInfo':
-                        this.showFileInfo(message.node);
+                    case 'showFunctionInfo':
+                        this.showFunctionInfo(message.node);
                         break;
                 }
             }
         );
     }
 
-    private async openFile(relativePath: string) {
+    private async openFile(relativePath: string, line: number = 1) {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders) {
             return;
@@ -55,36 +55,46 @@ export class DiagramViewProvider {
         const filePath = vscode.Uri.joinPath(workspaceFolders[0].uri, relativePath);
         try {
             const document = await vscode.workspace.openTextDocument(filePath);
-            await vscode.window.showTextDocument(document);
+            const editor = await vscode.window.showTextDocument(document);
+            const position = new vscode.Position(line - 1, 0);
+            editor.selection = new vscode.Selection(position, position);
+            editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
         } catch (error) {
             vscode.window.showErrorMessage(`Could not open file: ${relativePath}`);
         }
     }
 
-    private showFileInfo(node: any) {
+    private showFunctionInfo(node: any) {
         const message = `
-**File:** ${node.name}
+**Function:** ${node.name}
 **Type:** ${node.type}
-**Imports:** ${node.imports.length}
-**Exports:** ${node.exports.length}
+**File:** ${node.file}
+**Line:** ${node.startLine}
+**Calls:** ${node.calls.length} functions
 
-**Import List:**
-${node.imports.length > 0 ? node.imports.map((imp: string) => `- ${imp}`).join('\n') : 'None'}
-
-**Export List:**
-${node.exports.length > 0 ? node.exports.map((exp: string) => `- ${exp}`).join('\n') : 'None'}
+**Called Functions:**
+${node.calls.length > 0 ? node.calls.map((call: string) => `- ${call}`).join('\n') : 'None'}
         `.trim();
 
         vscode.window.showInformationMessage(message, { modal: true });
     }
 
-    private getWebviewContent(graph: ProjectGraph): string {
+    private getWebviewContent(graph: FunctionGraph): string {
+        // Group functions by file for better visualization
+        const fileGroups = new Map<string, any[]>();
+        for (const node of graph.nodes) {
+            if (!fileGroups.has(node.filePath)) {
+                fileGroups.set(node.filePath, []);
+            }
+            fileGroups.get(node.filePath)!.push(node);
+        }
+
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project Dependency Diagram</title>
+    <title>Function Call Graph</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         * {
@@ -128,28 +138,14 @@ ${node.exports.length > 0 ? node.exports.map((exp: string) => `- ${exp}`).join('
             background: var(--vscode-button-hoverBackground);
         }
 
-        #info {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            z-index: 1000;
-            background: var(--vscode-editor-background);
-            border: 1px solid var(--vscode-panel-border);
-            padding: 15px;
-            border-radius: 6px;
-            max-width: 300px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-        }
-
-        #info h3 {
-            margin-bottom: 10px;
-            color: var(--vscode-foreground);
-            font-size: 14px;
-        }
-
-        #info p {
-            margin: 5px 0;
-            font-size: 12px;
+        #controls input {
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            padding: 6px 10px;
+            margin: 4px;
+            border-radius: 4px;
+            width: 200px;
         }
 
         #stats {
@@ -163,71 +159,6 @@ ${node.exports.length > 0 ? node.exports.map((exp: string) => `- ${exp}`).join('
             border-radius: 6px;
             font-size: 12px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-        }
-
-        #diagram {
-            width: 100vw;
-            height: 100vh;
-        }
-
-        .node {
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .node circle {
-            fill: var(--vscode-button-background);
-            stroke: var(--vscode-button-foreground);
-            stroke-width: 2px;
-        }
-
-        .node:hover circle {
-            fill: var(--vscode-button-hoverBackground);
-            r: 12;
-        }
-
-        .node text {
-            font-size: 11px;
-            fill: var(--vscode-editor-foreground);
-            pointer-events: none;
-        }
-
-        .link {
-            stroke: var(--vscode-editorLineNumber-foreground);
-            stroke-opacity: 0.6;
-            stroke-width: 1.5px;
-            fill: none;
-            marker-end: url(#arrowhead);
-        }
-
-        .link:hover {
-            stroke: var(--vscode-focusBorder);
-            stroke-opacity: 1;
-            stroke-width: 2.5px;
-        }
-
-        .node.highlighted circle {
-            fill: var(--vscode-focusBorder);
-            r: 12;
-            stroke-width: 3px;
-        }
-
-        .link.highlighted {
-            stroke: var(--vscode-focusBorder);
-            stroke-opacity: 1;
-            stroke-width: 2.5px;
-        }
-
-        .link.dimmed {
-            stroke-opacity: 0.1;
-        }
-
-        .node.dimmed circle {
-            opacity: 0.3;
-        }
-
-        .node.dimmed text {
-            opacity: 0.3;
         }
 
         #legend {
@@ -249,12 +180,94 @@ ${node.exports.length > 0 ? node.exports.map((exp: string) => `- ${exp}`).join('
             align-items: center;
         }
 
-        .legend-color {
+        .legend-shape {
             width: 20px;
             height: 20px;
-            border-radius: 50%;
             margin-right: 8px;
             border: 2px solid var(--vscode-button-foreground);
+        }
+
+        #diagram {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .node {
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .node circle {
+            fill: var(--vscode-button-background);
+            stroke: var(--vscode-button-foreground);
+            stroke-width: 2px;
+        }
+
+        .node.function circle {
+            fill: #4CAF50;
+        }
+
+        .node.method circle {
+            fill: #2196F3;
+        }
+
+        .node.class circle {
+            fill: #FF9800;
+        }
+
+        .node:hover circle {
+            stroke-width: 3px;
+            r: 10;
+        }
+
+        .node text {
+            font-size: 10px;
+            fill: var(--vscode-editor-foreground);
+            pointer-events: none;
+        }
+
+        .file-label {
+            font-size: 9px;
+            fill: var(--vscode-descriptionForeground);
+            font-style: italic;
+        }
+
+        .link {
+            stroke: var(--vscode-editorLineNumber-foreground);
+            stroke-opacity: 0.6;
+            stroke-width: 1.5px;
+            fill: none;
+            marker-end: url(#arrowhead);
+        }
+
+        .link:hover {
+            stroke: var(--vscode-focusBorder);
+            stroke-opacity: 1;
+            stroke-width: 2.5px;
+        }
+
+        .node.highlighted circle {
+            fill: var(--vscode-focusBorder);
+            r: 10;
+            stroke-width: 3px;
+        }
+
+        .link.highlighted {
+            stroke: var(--vscode-focusBorder);
+            stroke-opacity: 1;
+            stroke-width: 2.5px;
+        }
+
+        .link.dimmed {
+            stroke-opacity: 0.1;
+        }
+
+        .node.dimmed circle {
+            opacity: 0.3;
+        }
+
+        .node.dimmed text {
+            opacity: 0.3;
         }
     </style>
 </head>
@@ -264,17 +277,31 @@ ${node.exports.length > 0 ? node.exports.map((exp: string) => `- ${exp}`).join('
         <button id="zoomOut">Zoom Out</button>
         <button id="resetView">Reset View</button>
         <button id="centerView">Center</button>
+        <br>
+        <input type="text" id="search" placeholder="Search function...">
     </div>
 
     <div id="stats">
-        <strong>Project Statistics</strong><br>
-        Files: <span id="fileCount">0</span><br>
-        Connections: <span id="connectionCount">0</span>
+        <strong>Function Call Graph</strong><br>
+        Functions: <span id="functionCount">0</span><br>
+        Connections: <span id="connectionCount">0</span><br>
+        Files: <span id="fileCount">0</span>
     </div>
 
     <div id="legend">
-        <strong>File Types</strong>
-        <div id="legendContent"></div>
+        <strong>Function Types</strong>
+        <div class="legend-item">
+            <div class="legend-shape" style="background-color: #4CAF50; border-radius: 50%;"></div>
+            <span>Function</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-shape" style="background-color: #2196F3; border-radius: 50%;"></div>
+            <span>Method</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-shape" style="background-color: #FF9800; border-radius: 50%;"></div>
+            <span>Class</span>
+        </div>
     </div>
 
     <svg id="diagram"></svg>
@@ -282,6 +309,24 @@ ${node.exports.length > 0 ? node.exports.map((exp: string) => `- ${exp}`).join('
     <script>
         const vscode = acquireVsCodeApi();
         const graphData = ${JSON.stringify(graph)};
+
+        // Transform node IDs to include file path
+        const nodeMap = new Map();
+        graphData.nodes.forEach(node => {
+            const id = node.filePath + '::' + node.name;
+            nodeMap.set(id, {
+                id: id,
+                name: node.name,
+                file: node.file,
+                filePath: node.filePath,
+                startLine: node.startLine,
+                type: node.type,
+                calls: node.calls
+            });
+        });
+
+        const nodes = Array.from(nodeMap.values());
+        const edges = graphData.edges;
 
         // Set up SVG
         const width = window.innerWidth;
@@ -306,7 +351,7 @@ ${node.exports.length > 0 ? node.exports.map((exp: string) => `- ${exp}`).join('
         svg.append('defs').append('marker')
             .attr('id', 'arrowhead')
             .attr('viewBox', '-0 -5 10 10')
-            .attr('refX', 20)
+            .attr('refX', 15)
             .attr('refY', 0)
             .attr('orient', 'auto')
             .attr('markerWidth', 8)
@@ -317,37 +362,24 @@ ${node.exports.length > 0 ? node.exports.map((exp: string) => `- ${exp}`).join('
             .style('stroke', 'none');
 
         // Update stats
-        document.getElementById('fileCount').textContent = graphData.nodes.length;
-        document.getElementById('connectionCount').textContent = graphData.edges.length;
-
-        // Create legend
-        const fileTypes = [...new Set(graphData.nodes.map(n => n.type))];
-        const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
-        
-        const legendContent = document.getElementById('legendContent');
-        fileTypes.forEach((type, i) => {
-            const item = document.createElement('div');
-            item.className = 'legend-item';
-            item.innerHTML = \`
-                <div class="legend-color" style="background-color: \${colorScale(type)}"></div>
-                <span>\${type}</span>
-            \`;
-            legendContent.appendChild(item);
-        });
+        document.getElementById('functionCount').textContent = nodes.length;
+        document.getElementById('connectionCount').textContent = edges.length;
+        const uniqueFiles = new Set(nodes.map(n => n.filePath));
+        document.getElementById('fileCount').textContent = uniqueFiles.size;
 
         // Create force simulation
-        const simulation = d3.forceSimulation(graphData.nodes)
-            .force('link', d3.forceLink(graphData.edges)
-                .id(d => d.path)
-                .distance(100))
-            .force('charge', d3.forceManyBody().strength(-300))
+        const simulation = d3.forceSimulation(nodes)
+            .force('link', d3.forceLink(edges)
+                .id(d => d.id)
+                .distance(150))
+            .force('charge', d3.forceManyBody().strength(-400))
             .force('center', d3.forceCenter(width / 2, height / 2))
-            .force('collision', d3.forceCollide().radius(40));
+            .force('collision', d3.forceCollide().radius(50));
 
         // Create links
         const link = g.append('g')
             .selectAll('path')
-            .data(graphData.edges)
+            .data(edges)
             .enter()
             .append('path')
             .attr('class', 'link')
@@ -356,10 +388,10 @@ ${node.exports.length > 0 ? node.exports.map((exp: string) => `- ${exp}`).join('
         // Create nodes
         const node = g.append('g')
             .selectAll('g')
-            .data(graphData.nodes)
+            .data(nodes)
             .enter()
             .append('g')
-            .attr('class', 'node')
+            .attr('class', d => 'node ' + d.type)
             .call(d3.drag()
                 .on('start', dragStarted)
                 .on('drag', dragged)
@@ -367,7 +399,8 @@ ${node.exports.length > 0 ? node.exports.map((exp: string) => `- ${exp}`).join('
             .on('click', (event, d) => {
                 vscode.postMessage({
                     command: 'openFile',
-                    filePath: d.path
+                    filePath: d.filePath,
+                    line: d.startLine
                 });
             })
             .on('mouseover', (event, d) => {
@@ -378,13 +411,18 @@ ${node.exports.length > 0 ? node.exports.map((exp: string) => `- ${exp}`).join('
             });
 
         node.append('circle')
-            .attr('r', 8)
-            .style('fill', d => colorScale(d.type));
+            .attr('r', 7);
 
         node.append('text')
-            .attr('dx', 12)
-            .attr('dy', 4)
+            .attr('dx', 10)
+            .attr('dy', -5)
             .text(d => d.name);
+
+        node.append('text')
+            .attr('class', 'file-label')
+            .attr('dx', 10)
+            .attr('dy', 5)
+            .text(d => d.file);
 
         // Simulation tick
         simulation.on('tick', () => {
@@ -419,25 +457,49 @@ ${node.exports.length > 0 ? node.exports.map((exp: string) => `- ${exp}`).join('
         // Highlight connections
         function highlightConnections(d) {
             const connectedNodes = new Set();
-            connectedNodes.add(d.path);
+            connectedNodes.add(d.id);
 
             link.classed('highlighted', l => {
-                if (l.source.path === d.path || l.target.path === d.path) {
-                    connectedNodes.add(l.source.path);
-                    connectedNodes.add(l.target.path);
+                if (l.source.id === d.id || l.target.id === d.id) {
+                    connectedNodes.add(l.source.id);
+                    connectedNodes.add(l.target.id);
                     return true;
                 }
                 return false;
-            }).classed('dimmed', l => l.source.path !== d.path && l.target.path !== d.path);
+            }).classed('dimmed', l => l.source.id !== d.id && l.target.id !== d.id);
 
-            node.classed('highlighted', n => n.path === d.path)
-                .classed('dimmed', n => !connectedNodes.has(n.path));
+            node.classed('highlighted', n => n.id === d.id)
+                .classed('dimmed', n => !connectedNodes.has(n.id));
         }
 
         function resetHighlight() {
             link.classed('highlighted', false).classed('dimmed', false);
             node.classed('highlighted', false).classed('dimmed', false);
         }
+
+        // Search functionality
+        document.getElementById('search').addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            
+            if (!searchTerm) {
+                resetHighlight();
+                return;
+            }
+
+            const matchingNodes = nodes.filter(n => 
+                n.name.toLowerCase().includes(searchTerm) ||
+                n.file.toLowerCase().includes(searchTerm)
+            );
+
+            if (matchingNodes.length > 0) {
+                const matchingIds = new Set(matchingNodes.map(n => n.id));
+                node.classed('highlighted', n => matchingIds.has(n.id))
+                    .classed('dimmed', n => !matchingIds.has(n.id));
+                link.classed('dimmed', true);
+            } else {
+                resetHighlight();
+            }
+        });
 
         // Control buttons
         document.getElementById('zoomIn').addEventListener('click', () => {

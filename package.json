@@ -1,8 +1,8 @@
 {
   "name": "vibe-flow",
-  "displayName": "Vibe Flow",
-  "description": "A VS Code extension",
-  "version": "0.0.1",
+  "displayName": "Vibe Flow - Code Flow Mapper",
+  "description": "AI-powered code flow analysis across multiple languages with static analysis, change diff, and runtime trace mapping",
+  "version": "0.1.0",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -18,8 +18,44 @@
         "title": "Vibe Flow: Show Project Dependency Diagram"
       },
       {
+        "command": "vibe-flow.showFunctionCallGraph",
+        "title": "Vibe Flow: Show Function Call Graph"
+      },
+      {
         "command": "vibe-flow.helloWorld",
         "title": "Vibe Flow: Hello World"
+      },
+      {
+        "command": "vibe-flow.analyzeStatic",
+        "title": "Code Flow Mapper: Analyze Static Call Graph"
+      },
+      {
+        "command": "vibe-flow.analyzeChangeDiff",
+        "title": "Code Flow Mapper: Analyze Changes (Diff)"
+      },
+      {
+        "command": "vibe-flow.analyzeRuntime",
+        "title": "Code Flow Mapper: Analyze Runtime Trace"
+      },
+      {
+        "command": "vibe-flow.analyzeCustom",
+        "title": "Code Flow Mapper: Analyze with Custom Input"
+      },
+      {
+        "command": "vibe-flow.startAutoCapture",
+        "title": "Vibe Flow: Start Auto-Capture Runtime Flow"
+      },
+      {
+        "command": "vibe-flow.stopAutoCapture",
+        "title": "Vibe Flow: Stop Auto-Capture and Analyze"
+      },
+      {
+        "command": "vibe-flow.captureCurrentDebug",
+        "title": "Vibe Flow: Capture Current Debug Session"
+      },
+      {
+        "command": "vibe-flow.showFlowDiagram",
+        "title": "Vibe Flow: Show Flow Diagram"
       }
     ]
   },

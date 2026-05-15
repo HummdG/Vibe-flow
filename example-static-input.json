@@ -1,0 +1,16 @@
+{
+  "mode": "static",
+  "files": [
+    {
+      "path": "example/calculator.py",
+      "language": "Python",
+      "content": "class Calculator:\n    def __init__(self):\n        self.memory = 0\n\n    def add(self, a, b):\n        result = self._calculate(a, b, '+')\n        self._store(result)\n        return result\n\n    def subtract(self, a, b):\n        result = self._calculate(a, b, '-')\n        self._store(result)\n        return result\n\n    def _calculate(self, a, b, op):\n        if op == '+':\n            return a + b\n        elif op == '-':\n            return a - b\n        return 0\n\n    def _store(self, value):\n        self.memory = value\n\ndef main():\n    calc = Calculator()\n    result = calc.add(5, 3)\n    print(f'Result: {result}')\n\nif __name__ == '__main__':\n    main()"
+    },
+    {
+      "path": "example/utils.js",
+      "language": "JavaScript",
+      "content": "function formatNumber(num) {\n    return num.toFixed(2);\n}\n\nfunction validateInput(value) {\n    if (typeof value !== 'number') {\n        throw new Error('Invalid input');\n    }\n    return true;\n}\n\nclass Logger {\n    constructor(name) {\n        this.name = name;\n    }\n\n    log(message) {\n        console.log(`[${this.name}] ${message}`);\n    }\n\n    error(message) {\n        console.error(`[${this.name}] ERROR: ${message}`);\n    }\n}\n\nmodule.exports = { formatNumber, validateInput, Logger };"
+    }
+  ]
+}
+

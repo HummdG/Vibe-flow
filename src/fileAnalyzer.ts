@@ -300,16 +300,11 @@ export class FileAnalyzer {
     }
 
     private isLocalImport(importPath: string): boolean {
-        // Check if it's a relative import (starts with . or ..)
-        if (importPath.startsWith('.') || importPath.startsWith('..')) {
-            return true;
-        }
-        
-        // For Python, check if it doesn't start with common package names
-        // For JS/TS, we already filtered relative imports
-        // For other languages, we consider non-package imports as local
-        
-        return false;
+        // Accept all imports - we'll filter out external ones during resolution
+        // The resolveImportPath method will return null for imports that don't
+        // resolve to actual files in the project, naturally filtering out
+        // external dependencies without needing to know their names
+        return true;
     }
 
     private getFileType(ext: string): string {
@@ -369,6 +364,29 @@ export class FileAnalyzer {
                     return testPath;
                 }
                 // Check for index files
+                const indexPath = path.join(resolvedPath, 'index' + ext);
+                if (this.fileNodes.has(indexPath)) {
+                    return indexPath;
+                }
+            }
+        } else {
+            // Handle absolute imports (e.g., Python: 'services.init' or JS: 'src/utils')
+            // Convert dot notation to path (for Python)
+            let resolvedPath = importPath.replace(/\./g, path.sep);
+            
+            // Try different extensions from workspace root
+            const extensions = ['', '.ts', '.tsx', '.js', '.jsx', '.py', '.java', '.go', '.rs'];
+            for (const ext of extensions) {
+                const testPath = resolvedPath + ext;
+                if (this.fileNodes.has(testPath)) {
+                    return testPath;
+                }
+                // Check for __init__.py (Python package indicator)
+                const initPath = path.join(resolvedPath, '__init__' + ext);
+                if (this.fileNodes.has(initPath)) {
+                    return initPath;
+                }
+                // Check for index files (JS/TS)
                 const indexPath = path.join(resolvedPath, 'index' + ext);
                 if (this.fileNodes.has(indexPath)) {
                     return indexPath;

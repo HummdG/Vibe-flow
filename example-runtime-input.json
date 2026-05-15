@@ -1,0 +1,55 @@
+{
+  "mode": "runtime",
+  "files": [
+    {
+      "path": "src/app.py",
+      "language": "Python",
+      "content": "from flask import Flask, request\n\napp = Flask(__name__)\n\ndef validate_user(username, password):\n    if len(username) < 3:\n        return False\n    if len(password) < 8:\n        return False\n    return check_credentials(username, password)\n\ndef check_credentials(username, password):\n    # Simplified credential check\n    return username == 'admin' and password == 'password123'\n\ndef log_login(username, success):\n    status = 'SUCCESS' if success else 'FAILED'\n    print(f'Login {status}: {username}')\n\n@app.route('/login', methods=['POST'])\ndef login():\n    username = request.form.get('username')\n    password = request.form.get('password')\n    \n    valid = validate_user(username, password)\n    log_login(username, valid)\n    \n    if valid:\n        return {'status': 'success', 'token': 'abc123'}\n    else:\n        return {'status': 'error', 'message': 'Invalid credentials'}, 401\n\nif __name__ == '__main__':\n    app.run()"
+    }
+  ],
+  "trace_events": [
+    {
+      "timestamp": "2025-12-31T10:30:00Z",
+      "type": "http_request",
+      "description": "POST /login",
+      "file": "src/app.py",
+      "line": 23,
+      "function": "login"
+    },
+    {
+      "timestamp": "2025-12-31T10:30:00.100Z",
+      "type": "function_call",
+      "description": "Validating user credentials",
+      "file": "src/app.py",
+      "line": 5,
+      "function": "validate_user",
+      "stack": ["login", "validate_user"]
+    },
+    {
+      "timestamp": "2025-12-31T10:30:00.150Z",
+      "type": "function_call",
+      "description": "Checking credentials in database",
+      "file": "src/app.py",
+      "line": 12,
+      "function": "check_credentials",
+      "stack": ["login", "validate_user", "check_credentials"]
+    },
+    {
+      "timestamp": "2025-12-31T10:30:00.200Z",
+      "type": "function_call",
+      "description": "Logging login attempt",
+      "file": "src/app.py",
+      "line": 17,
+      "function": "log_login",
+      "stack": ["login", "log_login"]
+    },
+    {
+      "timestamp": "2025-12-31T10:30:00.250Z",
+      "type": "http_response",
+      "description": "Returning success response",
+      "file": "src/app.py",
+      "line": 29
+    }
+  ]
+}
+
